@@ -1,0 +1,177 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Michail Xenakis"
+date: "27/12/2018"
+output: 
+  html_document: 
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+
+## Analysis
+
+Load the needed packages:
+```{r loadPackages}
+require(AppliedPredictiveModeling)
+require(caret)
+require(gbm)
+require(randomForest)
+require(rattle)
+require(rpart.plot)
+```
+
+### Getting and Cleaning the Data
+
+Download the training and testing datasets from the web:
+
+```{r downloadFiles}
+trainURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testURL <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(trainURL, "pml-training.csv", extra = "curl")
+download.file(testURL, "pml-testing.csv", extra = "curl")
+```
+
+Read the training and testing datasets into R:
+
+```{r readCSV}
+trainData <- read.csv("pml-training.csv", header = TRUE)
+valData <- read.csv("pml-testing.csv", header = TRUE)
+```
+
+Structure of the training dataset:
+
+```{r trainDataStructure}
+dim(trainData)
+```
+
+Variables of the testing dataset
+```{r testDataStructure}
+dim(valData)
+```
+
+The training dataset has 19,622 observations and 160 variables, whereas the validation dataset has only 20 observations and 160 variables (only var #160 is different between the two datasets). By running the str function (the results are not included in this present report due to word limitations) we see that a lot of variables are full of NA values. So, we will start removing these variables from our datasets. We will also remove the first seven variables as being unnecessary for our analysis.
+
+```{r removeNAs}
+trainData<- trainData[, colSums(is.na(trainData)) == 0]
+valData <- valData[, colSums(is.na(valData)) == 0]
+trainData <- trainData[, -c(1:7)]
+valData <- valData[, -c(1:7)]
+```
+
+After removing these variables the datasets have the following dimensions:
+
+```{r newDataSets}
+dim(trainData)
+dim(valData)
+```
+
+After cleaning the missing values (NAs), the training dataset has 19,622 observation and 86 variables, whereas the validation dataset has 20 observations and 53 variables. Before working with the training dataset we will also clean the near zero variance variables. 
+
+```{r nearZeroVariance}
+z <- nearZeroVar(trainData)
+trainData <- trainData[, -z]
+dim(trainData)
+```
+Now the trainData has also 53 variables.
+
+Now we will partition the "trainData" dataset into training and testing (75% and 25% respectively)
+
+```{r partitioning}
+set.seed(123456) 
+trainIndex <- createDataPartition(y = trainData$classe, p = 0.75, list = FALSE)
+trainingData <- trainData[trainIndex, ]
+testingData <- trainData[-trainIndex, ]
+dim(trainingData)
+dim(testingData)
+```
+In this paper we use three different models, namely:
+
+1. Classification Trees
+
+2. Generalized Boosted Model
+
+3. Random Forest
+
+### 1. Classification Tree
+We will run the model and obtain the dendrogram via the fancyRpartPlot function:
+
+```{r classTree}
+set.seed(123456)
+control <- trainControl(method = "cv", number = 3)
+classTree <- train(classe ~ ., data = trainingData, method = "rpart", trControl = control)
+fancyRpartPlot(classTree$finalModel)
+```
+
+We will validate now the aforementioned model on the testing dataset and see how this model performs:
+
+```{r classTreePredict}
+classTreePredict <- predict(classTree, testingData)
+ConfMaclassTree <- confusionMatrix(classTreePredict, testingData$classe)
+ConfMaclassTree
+```
+
+The accuracy of this model is very low (0.49). We will see now how the other two models perform.
+
+### 2. Generalized Boosted Model
+
+```{r GBM}
+set.seed(123456)
+control <- trainControl(method = "cv", number = 3)
+GBmodel <- train(classe ~., data = trainingData, method = "gbm",
+                 trControl = control, verbose = FALSE)
+print(GBmodel)
+```
+
+We will validate now the aforementioned model on the testing dataset and see how this model performs:
+
+```{r gbmPredict}
+GBmodelPredict <- predict(GBmodel, newdata = testingData)
+ConfMaGBM <- confusionMatrix(GBmodelPredict, testingData$classe)
+ConfMaGBM
+```
+
+The accuracy of the model is very high (0.9615)! Now, let's see the last model.
+
+### 3. Random Forest
+
+```{r randForest}
+set.seed(123456)
+control <- trainControl(method = "cv", number = 3)
+RFmodel <- train(classe ~., data = trainingData, method = "rf",
+                 trControl = control, verbose = FALSE)
+print(RFmodel)
+```
+
+We will validate now the aforementioned model on the testing dataset and see how this model performs:
+
+```{r randForestPredict}
+RFmodelPredict <- predict(RFmodel, newdata = testingData)
+ConfMaRFM <- confusionMatrix(RFmodelPredict, testingData$classe)
+ConfMaRFM
+```
+
+The accuracy of the model is higher than the previous models (0.9931)!
+
+## Conclusion
+
+The model that yielded the highest accuracy is the one that the Random Forest was employed (Accuracy: 0.9931). We will use this model now on the valData (initial test dataset).
+
+```{r validDataResult}
+prediction <- predict(RFmodel, newdata = valData)
+prediction
+```
+
+These predictions will inform our answers on the Course Project Prediction Quiz!
+
+Putting these predictions into the Course Project Prediction Quiz yielded a 100% mark.
+
